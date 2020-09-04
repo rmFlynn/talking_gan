@@ -82,91 +82,90 @@ def context_enc():
     # arbitrary reshape may be a problem
     x = Reshape((22,40,1))(x)
     out = Activation('sigmoid', name='strong_out')(x)
-    #audio_context = Model(inputs=x_start, outputs=out)
-    #audio_context.compile(optimizer='Adam', loss='binary_crossentropy',metrics = ['accuracy'])
-    #audio_context.summary()
     ce = out
-    #ce = audio_context
     return ce, x_start
 
 #UNET Functions
 
-def down_block(x, filters, kernal_size = (3, 3), padding ='same', strides=1):
-    c= Conv2D(filters, kernal_size, padding=padding, strides=strides, activation='relu')(x)
-    c= Conv2D(filters, kernal_size, padding=padding, strides=strides, activation='relu')(c)
+def down_block(x, filters, kernal_size=(3, 3), padding='same', strides=1):
+    c = Conv2D(filters, kernal_size, padding=padding, strides=strides)(x)
+    c = LeakyReLU()(c)
+    c = Conv2D(filters, kernal_size, padding=padding, strides=strides)(c)
+    c = LeakyReLU()(c)
     p = MaxPool2D((2, 2), (2, 2))(c)
     return c, p
 
-def up_block(x, skip, filters, kernal_size =(3, 3), padding='same', strides= 1):
+def up_block(x, skip, filters, kernal_size=(3, 3), padding='same', strides=1):
     us = UpSampling2D((2, 2))(x)
     concat = Concatenate()([us, skip])
-    c= Conv2D(filters, kernal_size, padding=padding, strides=strides, activation='relu')(concat)
-    c= Conv2D(filters, kernal_size, padding=padding, strides=strides, activation='relu')(c)
+    c = Conv2D(filters, kernal_size, padding=padding, strides=strides)(concat)
+    c = LeakyReLU()(c)
+    c = Conv2D(filters, kernal_size, padding=padding, strides=strides)(c)
+    c = LeakyReLU()(c)
     return c
 
-def up_block1(x, skip, filters, kernal_size =(3, 3), padding='same', strides= 1):
-    us = UpSampling2D((2, 2))(x)
-    concat = Concatenate()([x, skip])
-    c= Conv2D(filters, kernal_size, padding=padding, strides=strides, activation='relu')(concat)
-    c= Conv2D(filters, kernal_size, padding=padding, strides=strides, activation='relu')(c)
-    return c
-
-def bottleneck(IE, AE, NE, filters, kernal_size = (3, 3), padding ='same', strides=1):
-    #join_shape = (22,40, 128)
-    join_shape = (4, 8, 128)
-
-    IE = Flatten()(IE)
-    AE = Flatten()(AE)
-    concat1 = Concatenate()([IE, AE])
-    concat1 = Dense(np.prod(join_shape))(concat1)
-    concat1 = Reshape(join_shape)(concat1)
-    c= Conv2D(filters, kernal_size, padding=padding, strides=strides, activation='relu')(concat1)
-    c= Conv2D(filters, kernal_size, padding=padding, strides=strides, activation='relu')(c)
-    return c
-
-#def Gener(input_dim, image_channels):
-#def build_generator(discrim):
-def build_generator():
-    f= [8, 16, 32, 64, 128, 256]
-    #Filters per layers
-
-    #Data shape entering the convolusion
-    inputs = Input((64,128,3))
+def make_vid(data, name):
+    data = np.concatenate([data, data, data], axis=3)
+    fourcc = cv2.VideoWriter_fourcc(*'DIVX')
+    fps = 30
+    shape = (data.shape[2], data.shape[1])
+    out = cv2.VideoWriter(name + ".avi", fourcc, fps, shape)
+    for f in data:
+        out.write((f).astype('uint8'))
+    out.release()
 
 
-    #Input layer
-    p0= inputs
+data = np.load('./video1.npy')
+data = data / 255
+data.shape
 
-    #Down bloc encoding
-    c1, p1 = down_block(p0, f[0])
-    c2, p2 = down_block(p1, f[1])
-    c3, p3 = down_block(p2, f[2])
-    c4, p4 = down_block(p3, f[3])
-    c5, p5 = down_block(p4, f[4]) # output is 4,8, 128
-    # test = Model(inputs=inputs, outputs=p5)
-    # test.compile(optimizer='Adam', loss='binary_crossentropy',metrics = ['accuracy'])
-    # test.summary()
+f = [8, 16, 32, 64, 128, 256]
 
-    #switch over layer to up bloc decoder
-    ne = noise_enc()
-    ae, inputs2 = context_enc()
+inputs = Input((72, 128, 1))
 
-    bn = bottleneck(p5, ae, ne, f[5])
+# Down bloc encoding
+c1, d = down_block(inputs, f[0])
+c2, d = down_block(d, f[1])
+c3, d = down_block(d, f[2])
+d = ZeroPadding2D(((0, 1), (0, 0)))(d)
+c4, d = down_block(d, f[3])
+d = ZeroPadding2D(((0, 1), (0, 0)))(d)
+c5, d = down_block(d, f[4])
+d = Flatten()(d)
 
-    #Up bloc decoding
-    u1 = up_block1(bn, c5, f[4])
-    u2 = up_block(u1, c4, f[3])
-    u3 = up_block(u2, c3, f[2])
-    u4 = up_block(u3, c2, f[1])
-    u5 = up_block(u4, c1, f[0])
+n = Dense(1536)(d)
+n = Dense(1536)(n)
+n = LeakyReLU()(n)
+n = Reshape((3, 4, 128))(n)
 
-    #autoencoder egress layer. Flatten and any perceptron layers would succeed this layer
-    outputs = Conv2D(3, (1, 1), padding='same', activation = 'tanh')(u5)
-    #outputs = Conv2D(3, (1, 1), padding='same', activation = 'tanh')(bn)
+# Up bloc decoding
+u = up_block(n, c5, f[4])
+u = Cropping2D(((0, 1), (0, 0)))(u)
+u = up_block(u, c4, f[3])
+u = Cropping2D(((0, 1), (0, 0)))(u)
+u = up_block(u, c3, f[2])
+u = up_block(u, c2, f[1])
+u = up_block(u, c1, f[0])
 
-    #Keras model output
-    model = Model([inputs, inputs2], outputs, name='gener')
-    #model.compile(optimizer='Adam', loss='binary_crossentropy',metrics = ['accuracy'])
+u = Conv2D(1, (1, 1), padding='same')(u)
+
+
+bn = bottleneck(p5, ae, ne, f[5])
+
+#Up bloc decoding
+u1 = up_block1(bn, c5, f[4])
+u2 = up_block(u1, c4, f[3])
+u3 = up_block(u2, c3, f[2])
+u4 = up_block(u3, c2, f[1])
+u5 = up_block(u4, c1, f[0])
+
+#autoencoder egress layer. Flatten and any perceptron layers would succeed this layer
+outputs = Conv2D(3, (1, 1), padding='same', activation = 'tanh')(u5)
+#outputs = Conv2D(3, (1, 1), padding='same', activation = 'tanh')(bn)
+
+#Keras model output
+model = Model([inputs, inputs2], outputs, name='gener')
+#model.compile(optimizer='Adam', loss='binary_crossentropy',metrics = ['accuracy'])
 
     return model, [inputs, inputs2]
 

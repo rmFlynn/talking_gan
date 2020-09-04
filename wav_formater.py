@@ -1,14 +1,16 @@
-
 import os
 import pandas as pd
 import numpy as np
 # audio editing libs
-import librosa
-import librosa.display
+# import librosa
+# import librosa.display
 from pydub import AudioSegment
 import matplotlib.pyplot as plt
 
-sound = AudioSegment.from_file('1.wav')
+path = "data/Audio/"
+aud = "1.wav"
+
+sound = AudioSegment.from_file(path + aud)
 #frame_file_path = "frames1/"
 #np_frame_file_path = "npframes1/"
 #frame_file_path = "frames1-half/"

@@ -1,11 +1,9 @@
 import warnings
 # Don't fear the future
 warnings.simplefilter(action='ignore', category=FutureWarning)
-from tensorflow.keras.models import load_model
+# from tensorflow.keras.models import load_model
 import numpy as np
 import cv2
-import os
-from PIL import Image
 
 def make_video(training_vid_path, training_audio_path, name, generator_path, length):
     # Get the information of the incoming image type
@@ -48,6 +46,7 @@ training_audio_path = "/home/dl-group/data/Audio/audio1.npy"
 name = "test-e180.avi"
 generator_path = './generator-e180.h5'
 length = 1000
+
 
 make_video(training_vid_path, training_audio_path, name, generator_path, length)
 
