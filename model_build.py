@@ -1,5 +1,5 @@
-
 import warnings
+import tensorflow as tf
 # Don't fear the future
 warnings.simplefilter(action='ignore', category=FutureWarning)
 # load all the layers
@@ -39,134 +39,140 @@ from tensorflow.keras import Model
 # load other stuff stuff
 import numpy as np
 import cv2
+strategy = tf.distribute.MirroredStrategy()
 
 #        ################
 #        ##  Functions ##
 #        ################
 
-def audio_block(x, filters, kernal_size=(2, 2), padding='same', strides=1):
-    c = Conv2D(filters, kernal_size, padding=padding, strides=strides)(x)
-    c = LeakyReLU()(c)
-    c = Conv2D(filters, kernal_size, padding=padding, strides=strides)(c)
-    c = LeakyReLU()(c)
-    return c
-
-def image_block(x, filters, kernal_size=(3, 3), padding='same', strides=1):
-    c = Conv2D(filters, kernal_size, padding=padding, strides=strides)(x)
-    c = LeakyReLU(alpha=0.1)(c)
-    c = Conv2D(filters, kernal_size, padding=padding, strides=strides)(c)
-    c = LeakyReLU(alpha=0.1)(c)
-    c = MaxPool2D((2, 2), (2, 2))(c)
-    return c
-
-def down_block(x, filters, kernal_size=(3, 3), padding='same', strides=1):
-    c = Conv2D(filters, kernal_size, padding=padding, strides=strides)(x)
-    c = LeakyReLU(alpha=0.1)(c)
-    c = Conv2D(filters, kernal_size, padding=padding, strides=strides)(c)
-    c = LeakyReLU(alpha=0.1)(c)
-    p = MaxPool2D((2, 2), (2, 2))(c)
-    return c, p
-
-def up_block(x, skip, filters, kernal_size=(3, 3), padding='same', strides=1):
-    us = UpSampling2D((2, 2))(x)
-    concat = Concatenate()([us, skip])
-    c = Conv2D(filters, kernal_size, padding=padding, strides=strides)(concat)
-    c = LeakyReLU(alpha=0.1)(c)
-    c = Conv2D(filters, kernal_size, padding=padding, strides=strides)(c)
-    c = LeakyReLU(alpha=0.1)(c)
-    return c
-
-def make_vid(data, name):
-    data = np.concatenate([data, data, data], axis=3)
-    fourcc = cv2.VideoWriter_fourcc(*'DIVX')
-    fps = 30
-    shape = (data.shape[2], data.shape[1])
-    out = cv2.VideoWriter(name + ".avi", fourcc, fps, shape)
-    for f in data:
-        out.write((f).astype('uint8'))
-    out.release()
-
-
 class TalkingGan():
-    # Data shape entering the convolusion
-    input_image = Input((72, 128, 1))
-    input_ident = Input((72, 128, 2))
-    input_audio = Input((320, 8, 1))
-    
-    # Filters per layers
-    f = [8, 16, 32, 64, 128, 256]
-    
-    # #######################
-    # ##    Context Def    ##
-    # #######################
-    
-    a = audio_block(input_audio, f[0])
-    a = audio_block(a, f[1])
-    a = audio_block(a, f[2])
-    a = audio_block(a, f[3])
-    a = Flatten()(a)
-    # a = Dense(1000)(a)
-    # a = Dense(1000)(a)
-    # model = Model(input_audio, a)
-    # model.summary()
-    
-    # #######################
-    # ##   Generator Def   ##
-    # #######################
-    
-    # Down bloc encoding
-    c1, d = down_block(input_image, f[0])
-    c2, d = down_block(d, f[1])
-    c3, d = down_block(d, f[2])
-    d = ZeroPadding2D(((0, 1), (0, 0)))(d)
-    c4, d = down_block(d, f[3])
-    d = ZeroPadding2D(((0, 1), (0, 0)))(d)
-    c5, d = down_block(d, f[4])
-    d = Flatten()(d)
-    
-    n = Concatenate()([d, a])
-    n = Dense(3000)(n)
-    n = Reshape((-1, 1))(n)
-    n = GRU(8,
-            activation='tanh',
-            dropout=0.2,
-            recurrent_dropout=0.3,
-            return_sequences=True)(n)
-    n = Flatten()(n)
-    n = Dense(1536)(n)
-    n = LeakyReLU()(n)
-    n = Reshape((3, 4, 128))(n)
-    
-    # Up bloc decoding
-    u = up_block(n, c5, f[4])
-    u = Cropping2D(((0, 1), (0, 0)))(u)
-    u = up_block(u, c4, f[3])
-    u = Cropping2D(((0, 1), (0, 0)))(u)
-    u = up_block(u, c3, f[2])
-    u = up_block(u, c2, f[1])
-    u = up_block(u, c1, f[0])
-    u = Conv2D(1, (1, 1), padding='same', activation='tanh')(u)
-    
-    generator = Model([input_image, input_audio], u)
-    generator.compile(optimizer=Adam(), loss=MeanSquaredError(), metrics=['accuracy'])
-    
-    # #######################
-    # ##    Context Def    ##
-    # #######################
-    fd = image_block(input_ident, f[0])
-    fd = image_block(fd, f[1])
-    fd = image_block(fd, f[2])
-    fd = image_block(fd, f[3])
-    fd = Flatten()(fd)
-    fd = Dense(1000)(fd)
-    fd = Dense(100)(fd)
-    fd = Dense(10, activation='sigmoid')(fd)
-    fd = Dense(1, activation='sigmoid')(fd)
-    ident_discriminator = Model(input_ident, fd)
-    ident_discriminator.compile(optimizer=Adam(), loss=BinaryCrossentropy(), metrics=['accuracy'])
 
-    def train(self, cnt=1, num_epoch=1000, batch_size=2**8, seed_size=42, work_path='./', save_freq=100, metrics=[]):
-        pass
+     def audio_block(self, x, filters, kernal_size=(2, 2), padding='same', strides=1):
+         c = Conv2D(filters, kernal_size, padding=padding, strides=strides)(x)
+         c = LeakyReLU()(c)
+         c = Conv2D(filters, kernal_size, padding=padding, strides=strides)(c)
+         c = LeakyReLU()(c)
+         return c
+
+     def image_block(self, x, filters, kernal_size=(3, 3), padding='same', strides=1):
+         c = Conv2D(filters, kernal_size, padding=padding, strides=strides)(x)
+         c = LeakyReLU(alpha=0.1)(c)
+         c = Conv2D(filters, kernal_size, padding=padding, strides=strides)(c)
+         c = LeakyReLU(alpha=0.1)(c)
+         c = MaxPool2D((2, 2), (2, 2))(c)
+         return c
+
+     def down_block(self, x, filters, kernal_size=(3, 3), padding='same', strides=1):
+         c = Conv2D(filters, kernal_size, padding=padding, strides=strides)(x)
+         c = LeakyReLU(alpha=0.1)(c)
+         c = Conv2D(filters, kernal_size, padding=padding, strides=strides)(c)
+         c = LeakyReLU(alpha=0.1)(c)
+         p = MaxPool2D((2, 2), (2, 2))(c)
+         return c, p
+
+     def up_block(self, x, skip, filters, kernal_size=(3, 3), padding='same', strides=1):
+         us = UpSampling2D((2, 2))(x)
+         concat = Concatenate()([us, skip])
+         c = Conv2D(filters, kernal_size, padding=padding, strides=strides)(concat)
+         c = LeakyReLU(alpha=0.1)(c)
+         c = Conv2D(filters, kernal_size, padding=padding, strides=strides)(c)
+         c = LeakyReLU(alpha=0.1)(c)
+         return c
+
+     def make_vid(self, data, name):
+         data = np.concatenate([data, data, data], axis=3)
+         fourcc = cv2.VideoWriter_fourcc(*'DIVX')
+         fps = 30
+         shape = (data.shape[2], data.shape[1])
+         out = cv2.VideoWriter(name + ".avi", fourcc, fps, shape)
+         for f in data:
+             out.write((f).astype('uint8'))
+         out.release()
+
+     def __init__(self):
+         strategy = tf.distribute.MirroredStrategy()
+         # strategy = tf.distribute.experimental.MultiWorkerMirroredStrategy
+         # strategy = tf.distribute.get_strategy()
+
+         # Filters per layers
+         f = [8, 16, 32, 64, 128, 256]
+
+         with strategy.scope():
+             # Data shape entering the convolusion
+             input_image = Input((72, 128, 1))
+             input_ident = Input((72, 128, 2))
+             input_audio = Input((320, 8, 1))
+
+             # #######################
+             # ##    Context Def    ##
+             # #######################
+
+             a = self.audio_block(input_audio, f[0])
+             a = self.audio_block(a, f[1])
+             a = self.audio_block(a, f[2])
+             a = self.audio_block(a, f[3])
+             a = Flatten()(a)
+             # a = Dense(1000)(a)
+             # a = Dense(1000)(a)
+             # model = Model(input_audio, a)
+             # model.summary()
+
+             # #######################
+             # ##   Generator Def   ##
+             # #######################
+
+             # Down bloc encoding
+             c1, d = self.down_block(input_image, f[0])
+             c2, d = self.down_block(d, f[1])
+             c3, d = self.down_block(d, f[2])
+             d = ZeroPadding2D(((0, 1), (0, 0)))(d)
+             c4, d = self.down_block(d, f[3])
+             d = ZeroPadding2D(((0, 1), (0, 0)))(d)
+             c5, d = self.down_block(d, f[4])
+             d = Flatten()(d)
+
+             n = Concatenate()([d, a])
+             n = Dense(3000)(n)
+             n = Reshape((3000, 1))(n)
+             n = GRU(8,
+                     activation='tanh',
+                     dropout=0.2,
+                     recurrent_dropout=0.3,
+                     return_sequences=True)(n)
+             n = Flatten()(n)
+             n = Dense(1536)(n)
+             n = LeakyReLU()(n)
+             n = Reshape((3, 4, 128))(n)
+
+             # Up bloc decoding
+             u = self.up_block(n, c5, f[4])
+             u = Cropping2D(((0, 1), (0, 0)))(u)
+             u = self.up_block(u, c4, f[3])
+             u = Cropping2D(((0, 1), (0, 0)))(u)
+             u = self.up_block(u, c3, f[2])
+             u = self.up_block(u, c2, f[1])
+             u = self.up_block(u, c1, f[0])
+             u = Conv2D(1, (1, 1), padding='same', activation='tanh')(u)
+
+             self.generator = Model([input_image, input_audio], u)
+             # generator.summary()
+             self.generator.compile(optimizer=Adam(), loss=MeanSquaredError(), metrics=['accuracy'])
+
+             fd = self.image_block(input_ident, f[0])
+             fd = self.image_block(fd, f[1])
+             fd = self.image_block(fd, f[2])
+             fd = self.image_block(fd, f[3])
+             fd = Flatten()(fd)
+             fd = Dense(1000)(fd)
+             fd = Dense(100)(fd)
+             fd = Dense(10, activation='sigmoid')(fd)
+             fd = Dense(1, activation='sigmoid')(fd)
+
+             self.ident_discriminator = Model(input_ident, fd)
+             self.ident_discriminator.compile(optimizer=Adam(), loss=BinaryCrossentropy(), metrics=['accuracy'])
+
+def train(self, cnt=1, num_epoch=1000, batch_size=2**8, seed_size=42, work_path='./', save_freq=100, metrics=[]):
+    pass
 
 def load_video(path_video, path_audio):
     video = np.load(path_video)
@@ -228,6 +234,7 @@ def get_ident_training_set(fake_video, real_video, image_input):
 
 cnt = 1
 num_epoch = 12
+num_epoch = 1
 batch_size = 2**7
 seed_size = 42
 work_path = './'
@@ -237,17 +244,19 @@ metrics = []
 video, image, audio = load_video(path_video='./video1.npy', path_audio='./data/Audio/audio1.npy')
 index, batch_video, batch_audio = get_batch_video(video, audio, batch_size)
 tgan = TalkingGan()
-for j in num_epoch:
+for j in range(num_epoch):
     for i in index:
-        real_video = batch_video[i]
-        real_audio = batch_audio[i]
-        image_input = get_image_context(real_video, image)
-        # Train the generator
-        tgan.generator.train_on_batch([image_input, real_audio], real_video)
-        # make a training set
-        fake_video = tgan.generator.predict([image_input, real_audio])
-        ident_video, ident_y = get_ident_training_set(fake_video, real_video, image_input)
-        tgan.ident_discriminator.train_on_batch(ident_video, ident_y)
+        pass
+
+real_video = batch_video[i]
+real_audio = batch_audio[i]
+image_input = get_image_context(real_video, image)
+# Train the generator
+tgan.generator.train_on_batch([image_input, real_audio], real_video)
+# make a training set
+fake_video = tgan.generator.predict([image_input, real_audio])
+ident_video, ident_y = get_ident_training_set(fake_video, real_video, image_input)
+tgan.ident_discriminator.train_on_batch(ident_video, ident_y)
 
 pred = tgan.generator.predict([image, audio])
 make_vid(video * 255, "vid1")
