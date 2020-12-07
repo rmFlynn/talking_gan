@@ -94,13 +94,14 @@ class TalkingGan():
          # strategy = tf.distribute.experimental.MultiWorkerMirroredStrategy
          # strategy = tf.distribute.get_strategy()
 
-         # Filters per layers
-         f = [8, 16, 32, 64, 128, 256]
-
          with strategy.scope():
+
+             # Filters per layers
+             f = [8, 16, 32, 64, 128, 256]
+
              # Data shape entering the convolusion
              input_image = Input((72, 128, 1))
-             input_ident = Input((72, 128, 2))
+             input_ident = Input((72, 128, 1))
              input_audio = Input((320, 8, 1))
 
              # #######################
@@ -155,24 +156,38 @@ class TalkingGan():
              u = Conv2D(1, (1, 1), padding='same', activation='tanh')(u)
 
              self.generator = Model([input_image, input_audio], u)
-             # generator.summary()
              self.generator.compile(optimizer=Adam(), loss=MeanSquaredError(), metrics=['accuracy'])
 
-             fd = self.image_block(input_ident, f[0])
-             fd = self.image_block(fd, f[1])
-             fd = self.image_block(fd, f[2])
-             fd = self.image_block(fd, f[3])
-             fd = Flatten()(fd)
-             fd = Dense(1000)(fd)
+             fr = self.concatenate()([input_image, input_ident])
+             fr = self.image_block(fr, f[0])
+             fr = self.image_block(fr, f[1])
+             fr = self.image_block(fr, f[2])
+             fr = self.image_block(fr, f[3])
+             fr = Flatten()(fr)
+
+             fd = Dense(1000)(fr)
              fd = Dense(100)(fd)
              fd = Dense(10, activation='sigmoid')(fd)
              fd = Dense(1, activation='sigmoid')(fd)
 
-             self.ident_discriminator = Model(input_ident, fd)
+             self.ident_discriminator = Model([input_image, input_ident], fd)
              self.ident_discriminator.compile(optimizer=Adam(), loss=BinaryCrossentropy(), metrics=['accuracy'])
 
-def train(self, cnt=1, num_epoch=1000, batch_size=2**8, seed_size=42, work_path='./', save_freq=100, metrics=[]):
-    pass
+             s = Concatenate()([fr, a])
+             s = Dense(1000)(s)
+             s = Dense(100)(s)
+             s = Dense(10, activation='sigmoid')(s)
+             s = Dense(1, activation='sigmoid')(s)
+
+             self.seq_discriminator = Model([input_image, input_audio], s)
+             self.seq_discriminator.compile(optimizer=Adam(), loss=BinaryCrossentropy(), metrics=['accuracy'])
+
+             self.seq_discriminator.trainable = False
+             self.seq_training_stack = Model([input_image, input_audio],
+                                             self.seq_discriminator(self.generator([input_image, input_audio])))
+             self.seq_training_stack.compile(optimizer=Adam(), loss=BinaryCrossentropy(), metrics=['accuracy'])
+
+tgan = TalkingGan()
 
 def load_video(path_video, path_audio):
     video = np.load(path_video)
@@ -231,6 +246,8 @@ def get_ident_training_set(fake_video, real_video, image_input):
     )
     return ident_video, ident_y
 
+def train(self, cnt=1, num_epoch=1000, batch_size=2**8, seed_size=42, work_path='./', save_freq=100, metrics=[]):
+    pass
 
 cnt = 1
 num_epoch = 12
