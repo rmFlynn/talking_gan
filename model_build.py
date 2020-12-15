@@ -108,9 +108,9 @@ class TalkingGan():
         d = Flatten()(d)
 
         n = Concatenate()([d, a])
-        n = Dense(1000)(n)
-        n = LeakyReLU()(n)
-        n = Reshape((1000, 1))(n)
+        n = Dense(2000)(n)
+        # n = LeakyReLU()(n)
+        n = Reshape((2000, 1))(n)
         n = GRU(8,
                 activation='tanh',
                 dropout=0.2,
@@ -168,9 +168,9 @@ class TalkingGan():
         a = Flatten()(a)
 
         s = Concatenate()([fr, a])
-        s = Dense(1000)(s)
-        s = LeakyReLU()(s)
-        s = Reshape((1000, 1))(s)
+        s = Dense(3000)(s)
+        #s = LeakyReLU()(s)
+        s = Reshape((3000, 1))(s)
         s = GRU(8,
                 activation='tanh',
                 dropout=0.2,
@@ -197,12 +197,6 @@ class TalkingGan():
             [self.input_image, self.input_ident, self.input_audio],
             self.seq_discriminator([self.generator([self.input_image, self.input_audio]), self.input_audio]))
         self.ident_training_stack.compile(optimizer=Adam(), loss=BinaryCrossentropy(), metrics=['accuracy'])
-
-# strategy = tf.distribute.MirroredStrategy()
-# strategy = tf.distribute.experimental.MultiWorkerMirroredStrategy
-# strategy = tf.distribute.get_strategy()
-
-# tgan.define_generator()
 
 def load_video(path_video, path_audio):
     video = np.load(path_video)
@@ -289,7 +283,7 @@ with strategy.scope():
 
 video.shape
 images = get_image_context(video, image)
-tgan.generator.fit([images, audio], video, batch_size=2**7)
+tgan.generator.fit([images, audio], video, batch_size=2**7, epochs=4)
 
 # tgan.generator.fit([np.repeat(image, audio.shape[0]).shape, audio]video)
 for j in range(num_epoch):
@@ -315,7 +309,7 @@ for j in range(num_epoch):
         print(acur)
 
 image.shape
-pred = tgan.generator.predict([image_input,real_audio])
+pred = tgan.generator.predict([images, audio])
 tgan.make_vid(video * 255, "vid1")
 tgan.make_vid(pred * (255), "vid1_unet")
 
